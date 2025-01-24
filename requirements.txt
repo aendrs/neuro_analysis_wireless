@@ -1,0 +1,11 @@
+numpy
+pandas
+scikit-learn
+xgboost
+shap
+umap-learn
+seaborn
+matplotlib
+python-pptx
+networkx
+cylouvain
