@@ -250,3 +250,69 @@ def transform_column_names(input_string):
         return f"A_{part2}_{part1}"
     else:
         raise ValueError(f"Input string does not match the expected format: {input_string}")
+
+
+
+def load_spiketrain_datasets_multivariate_tensor(folders, labelsdict, header=None, time_suffix='_-500_500'):
+    '''
+    Loads spiketrain data (each single unit in a separate xlsx file, check file structure)
+    
+    Returns
+    inter_unit_collector - List of dataframes. Each dataframe has dimensions NxTimepoints(spiketrain, usually 1ms columns).
+                            The first dimension, N, is calculated as other functions, stacking the different categories defined in labelsdict, just as how it is done with the binned data
+    inter_unit_collector_names -names of the units (dataframes in the previous list)
+    
+    
+    '''
+
+    labellist = []
+    labellistkey = []
+    inter_unit_collector=[]
+    inter_unit_collector_names=[]
+    
+    for array_folder in folders: # loop over electrode arrays
+        files= [f for f in os.listdir(array_folder) if f.endswith('.xlsx') or f.endswith('.csv')]
+        unit_list=[]
+        goodfiles=[]
+        for filename in files:
+            if not (time_suffix.lower() in filename.lower()):
+                #print(f'SKIP - {filename}')
+                continue #skip file if the time_suffix is not present (look at files to understand the pattern)
+            #print(f'OK - {filename}')    
+            goodfiles.append(filename)    #hold ONLY relevant files with appropriate suffix
+        
+        for filename in goodfiles:    
+            parts = filename.split('_') # Split the filename by underscores
+            prefix = '_'.join(parts[:6])# Join all relevant parts, example: "A_F5mouth_U_39_Ch_40"
+            unit_list.append(prefix)
+        units=list(set(unit_list)) #get unique units in the array
+        
+        for unit in units:
+            intra_unit_collector=[]
+            for category in list(labelsdict.keys()): # loop over categories
+                unit_file = [s for s in goodfiles if unit in s and category in s] #get matching files (should be only one)
+                #print(unit_file)
+                unit_file=unit_file[0] #get the string out of the list
+                #print(unit,category,unit_file)
+                f = os.path.join(array_folder, unit_file)
+                _, file_extension = os.path.splitext(filename)
+                if file_extension == '.xlsx':
+                    df = pd.read_excel(f, engine='openpyxl', header=header)                        
+                elif file_extension == '.csv':
+                    # Use default engine for .csv files
+                    df = pd.read_csv(f, header=header)
+                else:
+                    print(f"Unsupported file format: {file_extension}")
+                    continue # Skip this file if it's not .xlsx or .csv   
+                    
+                if (array_folder == folders[-1]) and (unit==units[-1]): # make the labels vector during the last loop, i.e., the last folder    
+                    labelkey = category
+                    labelkeyvec = [labelkey] * len(df)
+                    labelvec = np.full(len(df), fill_value=labelsdict[labelkey])
+                    labellist.append(labelvec.copy())
+                    labellistkey.append(labelkeyvec)
+                    
+                intra_unit_collector.append(df)
+            inter_unit_collector.append(pd.concat(intra_unit_collector, axis=0))
+            inter_unit_collector_names.append(unit)
+    return inter_unit_collector, inter_unit_collector_names, labellist, labellistkey
